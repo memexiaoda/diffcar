@@ -1,0 +1,141 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+import rospy
+import MySQLdb
+from geometry_msgs.msg import Pose,Quaternion,Point, PoseStamped, PoseWithCovarianceStamped, TwistWithCovariance, Twist, Vector3
+from transform_utils import quat_to_angle, normalize_angle
+from visualization_msgs.msg import Marker
+from actionlib_msgs.msg import *  
+from math import radians, pi
+import ttk
+from Tkinter import * 
+import tkMessageBox
+from tf_pose import TfRelation
+from math import sin,cos,pi
+from geometry_msgs.msg import Quaternion
+from geometry_msgs.msg import Twist
+from tf.transformations import quaternion_from_euler
+import threading
+# 导入tkinter包，为其定义别名tk
+# import Tkinter as tk
+
+class marker(Frame):
+    def __init__(self, master=None):
+        rospy.init_node('lisenpose', anonymous=True)
+        #rospy.Subscriber("initialpose",  PoseWithCovarianceStamped, self.callback)   
+        Frame.__init__(self, master)
+        self.pack()
+        self.createWidgets()
+
+        self.tf_relation = TfRelation()
+        rospy.sleep(5)
+        StatuThread = threading.Thread(target=self.SubStatuCallBack, args=())
+        StatuThread.setDaemon(True)
+        StatuThread.start()
+
+        rate = 10.0
+        self.r = rospy.Rate(rate)
+        self.PosX = 0.0
+        self.PosY = 0.0
+        self.Angle = 0.0
+
+        self.waypoints = list()
+        
+    def createWidgets(self):
+        self.nameInput = Entry(self)
+        self.nameInput.pack()
+        self.alertButton = Button(self, text='Hello', command=self.hello)
+        self.alertButton.pack()
+
+    def hello(self):
+        quaternion = Quaternion()
+        q_angle = quaternion_from_euler(0, 0, self.Angle, axes='sxyz')
+        quaternion = Quaternion(*q_angle)
+        # quaternion.x = 0.0 
+        # quaternion.y = 0.0
+        # quaternion.z = sin(self.Angle/2)
+        # quaternion.w = cos(self.Angle/2)
+            
+        self.waypoints.append(Pose(Point(self.PosX, self.PosY, 0.0), quaternion))
+        self.init_markers()
+
+        for waypoint in self.waypoints:
+            p = Point()
+            p = waypoint.position
+            self.markers.points.append(p)
+            #print self.markers.points
+            self.marker_pub.publish(self.markers)
+        
+
+        # self.PosX = 0.9
+        # self.PosY = 1.2
+        # self.Angle = 1.57
+        print 'Point is x=%.3f,y=%.3f,angle=%.3f' % (self.PosX,self.PosY,self.Angle)
+        fname=self.nameInput.get()
+        print "fname",fname
+        
+        conn=MySQLdb.connect(host='10.110.30.187', user='root', passwd='123456', db='suirui_outdoor_1_0', port=3306, charset='utf8')
+        cur = conn.cursor()
+        #cur.execute('insert into xxoo values(%.3f,%.3f, %.3f)' % (x, y, ang))
+        cur.execute('update rb_topologypoint set lasermapX=%.3f,lasermapY=%.3f,lasermapTh=%.3f where fname="%s"' % (self.PosX,self.PosY,self.Angle,fname))
+        #cur.execute('update rb_topologypoint set lasermapX=%.3f,lasermapY=%.3f,lasermapTh=%.3f where fname="%s"' % (x,y,ang,ip))
+        conn.commit()
+        cur.close()
+        conn.close()
+        tkMessageBox.showinfo('Message', 'Hello, %s' % fname)
+
+    def SubStatuCallBack(self):
+        #self.tf_relation = TfRelation()  #TF relation
+        while not rospy.is_shutdown():
+            try:
+                (position_l, rotation) = self.tf_relation.get_odom_map()
+                self.PosX =  position_l.x
+                self.PosY =  position_l.y
+                self.Angle = rotation
+                
+                self.r.sleep()
+            except Exception as err:
+                rospy.loginfo("nav_demo get_odom_map: err" + str(err))
+                self.r.sleep()
+                continue
+
+    def init_markers(self):
+        # Set up our waypoint markers
+        # 设置标记的尺寸
+        marker_scale = 0.8
+        marker_lifetime = 0 # 0 is forever
+        marker_ns = 'waypoints'
+        marker_id = 0
+        marker_color = {'r': 1.0, 'g': 0, 'b': 0, 'a': 1.0}
+        
+        # Define a marker publisher.
+        # 定义一个标记的发布者
+        self.marker_pub = rospy.Publisher('waypoint_markers', Marker,queue_size=0)
+        
+        # Initialize the marker points list.
+        # 初始化标记点的列表
+        self.markers = Marker()
+        self.markers.ns = marker_ns
+        self.markers.id = marker_id
+        self.markers.type = Marker.SPHERE_LIST
+        self.markers.action = Marker.ADD
+        self.markers.lifetime = rospy.Duration(marker_lifetime)
+        self.markers.scale.x = marker_scale
+        self.markers.scale.y = marker_scale
+        self.markers.color.r = marker_color['r']
+        self.markers.color.g = marker_color['g']
+        self.markers.color.b = marker_color['b']
+        self.markers.color.a = marker_color['a']
+        
+        self.markers.header.frame_id = 'map'
+        self.markers.header.stamp = rospy.Time.now()
+        self.markers.points = list()
+
+if __name__ == '__main__':
+    
+    top = Tk()
+    top.title("point marker") 
+    app = marker(top)
+    #app.master.title('Hello World')
+    top.mainloop()
+    rospy.spin()

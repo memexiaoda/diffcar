@@ -1,0 +1,10 @@
+#ID POSE
+Header header
+string poseid_end
+string poseid_start
+string pose_corner
+string line_id
+float32 curvity
+bool passinground_task
+geometry_msgs/Pose pose
+geometry_msgs/Pose pose_start

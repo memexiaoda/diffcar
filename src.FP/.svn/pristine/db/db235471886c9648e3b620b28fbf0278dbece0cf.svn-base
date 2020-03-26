@@ -1,0 +1,61 @@
+can_bitrate: 1000000
+filter_start_id: 0x601
+filter_stop_id: 0x602
+
+filter_start_mask: 1
+filter_start_mask: 2
+
+dev_serial_rs485: /dev/ttyUSB1
+dev_encoder_485: /dev/ttyUSB2
+dev_battery_485: /dev/ttyUSB3
+
+port_speed: 115200
+encoder_port_speed: 115200
+battery_port_speed: 9600
+send_len: 1002
+
+linear_factor: 1.0
+argular_factor_left: 1.55 #1.59
+argular_factor_right: 1.55 #1.59
+
+left_actor: 166.66
+right_actor: 166.66 #757 713
+
+ticks_meter: 35
+wheel_lenght: 1.05
+base_wide: 0.46
+
+LObstacle_front_sector: 90.0
+LObstacleStop: 0.55
+LObstacleSlow: 2.0
+
+LObstacle_low_sector: 60.0
+LObstacle_low_Stop: 0.55
+LObstacle_low_Slow: 1.8
+LObstacle_low_safe_dis: 1.9
+
+LObstacle_Ultrasonic_Slow: 2.0
+LObstacle_Ultrasonic_Stop: 0.4
+
+rate_vel: 50.0
+rate_send_vel: 20.0
+rate_request_vel: 0.5
+rate_encoder_vel: 20.0
+rate_ultra_vel: 20.0
+rate_battery_vel: 8.0
+
+FP_Obstacle_Limit_1: 70
+FP_Obstacle_Limit_2: 70
+FP_Limit: 135
+FP_Limit_Max: 400
+LowObstacle_Limit: 1.6
+LowObstacle_enable: false
+FP_soft_enable: false
+
+Acc_lim_xAD_chassis: 0.08
+Acc_lim_xDC_chassis: 0.2
+Acc_lim_theta_chassis: 0.03
+
+DockPile: cz2
+DockPoint: cd2
+Carport: ku2

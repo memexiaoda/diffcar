@@ -1,0 +1,7 @@
+[initialpose]
+pose_x = 0.936715108835
+pose_y = 0.0399839585407
+pose_z = -0.00654890223415
+
+[sec_b]
+max_speed = 0.5

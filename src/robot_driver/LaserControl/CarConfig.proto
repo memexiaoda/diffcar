@@ -1,0 +1,21 @@
+message CarConfig {
+    optional int32 Dspeed = 1;   //非沿线前进、后退速度
+    optional int32 Dangel = 2;   //非沿线转向速度
+    optional int32 SetBaseSpeed = 3;   //沿线基础速度
+    optional int32 SetEleTh = 4;   //电磁阈值
+    optional float SetElePidP = 5;   //设置PID参数P
+    optional float SetElePidI = 6;   //设置PID参数I
+    optional float SetElePidD = 7;   //设置PID参数D
+    optional float SetLaserThreshold = 8;   //激光避障报警阈值
+    optional float AlarmVoltage = 9;   //设置低压报警电压
+    optional int32 AlarmSOC = 10;   //设置低电量报警电量
+    optional bool CtrlEnableFobstacle = 11;   //使能前避障
+    optional bool CtrlEnableBobstacle = 12;   //使能后避障
+    optional bool SetClearBuffer = 13;   //清楚当前位置传感器值
+    optional float MaxSpeed = 14; //laser最大速度
+    optional float MinSpeed = 15; //laser最小速度
+    optional float AngleSpeed = 16; //laser角速度
+    optional float DistanceSlow = 17; //laser减速距离
+    optional float SetLaserThresholdStop =18; //激光避障报警阈值停车
+    optional float SetLaserThresholdSector =19;  //激光避障扇面阈值
+}

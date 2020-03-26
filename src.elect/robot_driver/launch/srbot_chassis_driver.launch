@@ -1,0 +1,8 @@
+<launch>
+  	<node name="threebot_chassis_driver" pkg="robot_driver" type="robot_driver_node" output="screen" clear_params="true">
+     	<rosparam file="$(find robot_driver)/config/chassis/robot_driver.yaml" command="load" />
+  	</node>
+  	
+ 	<include file="$(find turtlebot_teleop)/launch/xbox360_teleop.launch" />
+ 	
+</launch>

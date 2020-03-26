@@ -1,0 +1,519 @@
+#ifndef MODEL_TRX_H
+#define MODEL_TRX_H
+
+//#include "ros/ros.h"
+//#include "model_com/config.h"
+#include "model_com/interface_can.h"
+#include "model_com/interface_485.h"
+//#include "model_chassis/model_kinco.h"
+#include <geometry_msgs/Twist.h>
+#include <geometry_msgs/PoseWithCovarianceStamped.h>
+#include <std_msgs/String.h>
+#include <std_msgs/Float32.h>
+#include <std_msgs/Bool.h>
+#include <sensor_msgs/Imu.h>
+#include <sensor_msgs/LaserScan.h>
+#include <sensor_msgs/point_cloud2_iterator.h>
+#include <string>
+//#include <std_msgs/String.h>
+#include <algorithm>
+
+#include <sys/stat.h>
+#include <fcntl.h>
+//#include <termios.h>
+#include <time.h>
+
+#include <boost/function.hpp>
+#include <boost/thread/thread.hpp>
+
+#include <boost/lockfree/queue.hpp>
+#include <boost/lockfree/policies.hpp>
+//#include <carbot_msgs/Carinfo.h>
+#include <carbot_msgs/Manualcmd.h>
+//#include <carbot_msgs/ControlMsg.h>
+#include <carbot_msgs/FeedbackMsg.h>
+#include <carbot_msgs/Manualcmd.h>
+#include <sensor_msgs/LaserScan.h>
+#include <carbot_msgs/LedMsg.h>
+#include <carbot_msgs/BatteryInfo.h>
+#include <carbot_msgs/ControlInfo.h>
+#include <carbot_msgs/DriverInfo.h>
+#include <carbot_msgs/EquipmentInfo.h>
+#include <carbot_msgs/InspectInfo.h>
+//#include <carbot_msgs/Taskarrived.h>
+#include <carbot_msgs/Delayaction.h>
+#include <carbot_msgs/Delaytimerecorder.h>
+
+#include <ros/ros.h>
+#include <exception>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+namespace Chassis_Driver
+{
+// set serial speed
+//int speed_arr[] = { B115200, B38400, B19200, B9600, B4800, B2400, B1200, B300,\
+//		B115200, B38400, B19200, B9600, B4800, B2400, B1200, B300,};
+//
+//int name_arr[] = { 115200, 38400, 19200, 9600, 4800, 2400, 1200, 300, 115200, 38400, \
+//                   19200, 9600, 4800, 2400, 1200, 300,};
+
+extern int DectoHex(unsigned int dec, unsigned char *hex, int length);
+extern int HextoDec(unsigned char *hex, int length);
+extern int HextoDecDisc(unsigned char *hex, int length);
+
+typedef boost::function0<void> CallbackType;
+
+struct msg_send
+{
+	__u8 _pmsg[32];
+	int size;
+};
+
+struct msg_recv
+{
+	__u8 _rmsg[48];
+	int size;
+	ros::Time stamp;
+};
+
+boost::lockfree::queue<msg_send, boost::lockfree::fixed_sized<true> > que_msg_send(1000);//rs_232端口接收 无锁队列
+boost::lockfree::queue<msg_recv, boost::lockfree::fixed_sized<true> > que_msg_rev(1000);//rs_232端口接收 无锁队列
+boost::lockfree::queue<__u8, boost::lockfree::fixed_sized<true> > msg_splite(1000);//rs_232端口接收 无锁队列
+
+class Model_Trx
+{
+public:
+	Model_Trx():
+		base_wide(0.58),
+		left_speed(0),
+		right_speed(0),
+		wheel_lenght(0.33*M_PI),
+		filter_start_id(0x601),
+		filter_stop_id(0x602),
+		filter_start_mask(1),
+		filter_stop_mask(1),
+		dev_serial_rs485("/dev/ttyTHS2"),
+		port_speed(115200),
+		_has_Electricity(false),
+		LObstacle_low_sector_(180),
+		LObstacle_low_Stop_(0.8),
+		ticks_meter(14400),
+		ring_count_(0),
+		private_nh_("~")
+	{
+//		for(int i=0;i < 512; i++){
+//			send_buf[i]=0;
+//		}
+		private_nh_.param("rate_vel",rate_vel,50.0);
+		private_nh_.param("rate_send_vel",rate_send_vel,25.0);
+		private_nh_.param("rate_request_vel",rate_request_vel,0.5);
+		private_nh_.param("rate_encoder_vel",rate_encoder_vel,20.0);
+		private_nh_.param("rate_ultra_vel",rate_ultra_vel,10.0);
+		private_nh_.param("rate_battery_vel",rate_battery_vel,4.0);
+
+		_duration = ros::Duration(1.0/10.0);
+		rate = ros::Duration(1.0/rate_vel);
+		rate_send = ros::Duration(1.0/rate_send_vel);
+		rate_request = ros::Duration(1.0/rate_request_vel);
+		rate_encoder = ros::Duration(1.0/rate_encoder_vel);
+		rate_ultra = ros::Duration(1.0/rate_ultra_vel);
+
+		private_nh_.param("send_len",send_len,1001);
+		private_nh_.param("linear_factor",linear_factor_,(float)1.00);
+		private_nh_.param("argular_factor_left",argular_factor_left,(float)1.00);
+		private_nh_.param("argular_factor_right",argular_factor_right,(float)1.00);
+		private_nh_.param("wheel_lenght",wheel_lenght,(float)(0.33*M_PI));
+		private_nh_.param("base_wide",base_wide,(float)(0.58));
+		private_nh_.param("can_bitrate", can_bitrate, 1000000);
+		private_nh_.param("filter_start_id", filter_start_id, 0x601);
+		private_nh_.param("filter_stop_id", filter_stop_id, 0x602);
+		private_nh_.param("filter_start_mask", filter_start_mask, 1);
+		private_nh_.param("filter_stop_mask", filter_stop_mask, 1);
+		private_nh_.param<std::string>("dev_serial_rs485", dev_serial_rs485, "/dev/ttyTHS2");
+		private_nh_.param<std::string>("dev_encoder_485",dev_encoder_485, "/dev/ttyUSB1");
+		private_nh_.param<std::string>("dev_battery_485",dev_battery_485, "/dev/ttyUSB2");
+		private_nh_.param("port_speed", port_speed, 115200);
+		private_nh_.param("encoder_port_speed", encoder_port_speed, 115200);
+		private_nh_.param("battery_port_speed", battery_port_speed, 9600);
+		private_nh_.param("ticks_meter",ticks_meter, 64000);
+
+		private_nh_.param("LObstacleStop", LObstacleStop_, 0.7);
+		private_nh_.param("LObstacleSlow", LObstacleSlow_, 1.7);
+		private_nh_.param("LObstacle_front_sector", LObstacle_front_sector_, 45.0);
+		private_nh_.param("LObstacleStop_left", LObstacleStop_left_, 0.7);
+		private_nh_.param("LObstacle_left_sector", LObstacle_left_sector_, 45.0);
+		private_nh_.param("LObstacleStop_right", LObstacleStop_right_, 0.7);
+		private_nh_.param("LObstacle_right_sector", LObstacle_right_sector_, 45.0);
+
+		private_nh_.param("LObstacle_low_sector",LObstacle_low_sector_, 180.0);
+		private_nh_.param("LObstacle_low_safe_dis",LObstacle_low_safe_dis, 1.7);
+		private_nh_.param("LObstacle_low_Stop",LObstacle_low_Stop_, 0.8);
+		private_nh_.param("LObstacle_low_Slow",LObstacle_low_Slow_, 1.5);
+		private_nh_.param("LObstacle_Ultrasonic_Stop",LObstacle_Ultrasonic_Stop_, 0.7);
+		private_nh_.param("LObstacle_Ultrasonic_Slow",LObstacle_Ultrasonic_Slow_, 0.7);
+
+		private_nh_.param("left_actor", left_actor, 1.0);
+		private_nh_.param("right_actor", right_actor, 1.0);
+
+		_DockPile = private_nh_.getParam("/move_base/DockPile", _DockPile);
+		_DockPoint = private_nh_.getParam("/move_base/DockPoint", _DockPoint);
+		_Carport = private_nh_.getParam("/move_base/Carport", _Carport);
+
+		private_nh_.param<std::string>("DockPile", _DockPile, _DockPile);
+		private_nh_.param<std::string>("DockPoint", _DockPoint, _DockPoint);
+		private_nh_.param<std::string>("Carport", _Carport, _Carport);
+
+		//行走线段信息
+		private_nh_.param("start_point_id", _start_point_id, _DockPile);
+		private_nh_.param("end_point_id", _end_point_id, _DockPoint);
+		private_nh_.param("task_point_id", _task_point_id, _DockPoint);
+		private_nh_.param("task_Line_id", _task_Line_id, std::string(_DockPile +"-"+ _DockPoint));
+		private_nh_.param("task_goal", taskgoal_, _DockPoint);
+
+		private_nh_.param("LObstacleStop", LObstacleStop_, 0.7);
+		private_nh_.param("LObstacleSlow", LObstacleSlow_, 1.7);
+		private_nh_.param("LObstacle_front_sector", LObstacle_front_sector_, 45.0);
+		private_nh_.param("LObstacleStop_left", LObstacleStop_left_, 0.7);
+		private_nh_.param("LObstacle_left_sector", LObstacle_left_sector_, 45.0);
+		private_nh_.param("LObstacleStop_right", LObstacleStop_right_, 0.7);
+		private_nh_.param("LObstacle_right_sector", LObstacle_right_sector_, 45.0);
+//		private_nh_.param("delay_time", delay_time_, 1.0);
+//		private_nh_.param("delay_factor", delay_factor_, 0.086);
+		private_nh_.param("FP_Obstacle_Limit_1", FP_Obstacle_Limit_1, 90);
+		private_nh_.param("FP_Obstacle_Limit_2", FP_Obstacle_Limit_2, 90);
+		private_nh_.param("FP_Limit", FP_Limit_, 130);
+		private_nh_.param("FP_Limit_Max", FP_Limit_Max_, 200);
+		private_nh_.param("FOBT_DIS", FOBT_DIS_, 30);
+
+		private_nh_.param("LowObstacle_Limit", LowObstacle_Limit_, 1.6);
+		private_nh_.param("LowObstacle_enable", LowObstacle_enable_, true);
+		private_nh_.param("FP_soft_enable", FP_soft_enable_, true);
+		private_nh_.param("ObstacleWarning", ObstacleWarning, 0);
+
+		//acc_lim_x_chassis_, acc_lim_y_chassis_, acc_lim_theta_chassis_
+		private_nh_.param("Acc_lim_xAD_chassis", acc_lim_xAD_chassis_, 0.04);
+		private_nh_.param("Acc_lim_xDC_chassis", acc_lim_xDC_chassis_, 0.1);
+		private_nh_.param("Acc_lim_theta_chassis", acc_lim_theta_chassis_, 0.03);
+		private_nh_.param("event_limit_time", event_limit_time, 30);
+
+
+		InspectInfo_pub = private_nh_.advertise<carbot_msgs::InspectInfo>("/InspectInfo", 10);
+		equipmentInfo_pub = private_nh_.advertise<carbot_msgs::EquipmentInfo>("/EquipmentInfo", 10);
+		driverInfo_pub = private_nh_.advertise<carbot_msgs::DriverInfo>("/DriverInfo", 10);
+		batteryinfo_pub = private_nh_.advertise<carbot_msgs::BatteryInfo>("/BatteryInfo", 10);
+
+		vel_pub_ = private_nh_.advertise<geometry_msgs::Twist>("/real_vel", 5);
+		imu_pub = private_nh_.advertise<sensor_msgs::Imu>("imu_data_car",5);
+		imu_yaw_pub = private_nh_.advertise<geometry_msgs::Vector3>("imu_yaw_data",5);
+		dock_pub = private_nh_.advertise<std_msgs::String>("/dock_pub",5);
+		pub_scan = private_nh_.advertise<sensor_msgs::LaserScan>("/scan0",10);
+		obstacle_laser_pub = private_nh_.advertise<geometry_msgs::Vector3>("obstacle_chassis_laser",10);
+		obstacle_ultrasonic_pub = private_nh_.advertise<geometry_msgs::Vector3>("obstacle_chassis_ultrasonic",10);
+		control_style_pub = private_nh_.advertise<std_msgs::String>("/control_style",1);
+		obstacle_pub = private_nh_.advertise<geometry_msgs::Vector3>("obstacle_chassis",10);
+		obstacle_stop_state_pub = private_nh_.advertise<geometry_msgs::Vector3>("obstacle_chassis_stop_state",10);
+		//arrived_point_pub = private_nh_.advertise<carbot_msgs::Taskarrived>("/task_arrived", 1);
+		feedback_msg_pub = private_nh_.advertise<carbot_msgs::FeedbackMsg>("/FeedbackMsg", 1);
+		delay_motion_time_pub = private_nh_.advertise<carbot_msgs::Delaytimerecorder>("/delay_motion_time", 1);
+
+		vel_sub = private_nh_.subscribe("/cmd_vel", 10, &Model_Trx::velCallback, this);
+		joy_sub = private_nh_.subscribe("/cmd_vel_manual", 10, &Model_Trx::velCallbackmanual, this);
+		led_command_sub = private_nh_.subscribe("/cmd_led", 5, &Model_Trx::led_command_Callback, this);
+		manual_opration_sub = private_nh_.subscribe("/mamual_operation", 10,&Model_Trx::ManualctrolCallback, this);
+		control_style_sub = private_nh_.subscribe("/control_style", 10,&Model_Trx::controlstyleCallback, this);
+		power_stop_sub = private_nh_.subscribe("/power_stop", 10, &Model_Trx::powerstopCallback, this);
+		task_goal_sub = private_nh_.subscribe("/task_goal", 10, &Model_Trx::taskgoalCallback, this);
+		//task_arrived_sub = private_nh_.subscribe("/task_arrived", 1, &Model_Trx::task_arrivedCallback, this);
+		scan_stop_sub = private_nh_.subscribe("/scan0", 10, &Model_Trx::scanstopCallback, this);
+		pointcloud_sub = private_nh_.subscribe("/velodyne_points", 10, &Model_Trx::recvCallback, this);
+		move_info_sub = private_nh_.subscribe("/move_info", 10, &Model_Trx::move_recvCallback, this);
+		planner_state_sub = private_nh_.subscribe("/pose_attitude", 10, &Model_Trx::pose_attitude_recv, this);
+		high_laser_state_sub = private_nh_.subscribe("/high_laser_state", 10, &Model_Trx::laser_state_recv, this);
+		laser_scan_sub = private_nh_.subscribe<sensor_msgs::LaserScan>("/scan", 100, boost::bind(&Model_Trx::laserCB, this, _1));
+		feedback_msg_sub = private_nh_.subscribe("/FeedbackMsg",10,&Model_Trx::feedback_msg_suber, this);
+		client_delay_motion = private_nh_.serviceClient<carbot_msgs::Delayaction>("/move_base/delay_motion");
+		Init_model();
+	};
+
+	~Model_Trx(){
+		feedback_msg_received_thread->detach();
+		delete feedback_msg_received_thread;
+		feedback_msg_received_thread = NULL;
+
+		control_msg_send_thread->detach();
+		delete control_msg_send_thread;
+		control_msg_send_thread = NULL;
+
+		feedback_msg_received_thread->detach();
+		delete feedback_msg_received_thread;
+		feedback_msg_received_thread = NULL;
+	};
+
+	bool Init_model();
+
+	ros::NodeHandle nh_;
+	ros::NodeHandle private_nh_;
+
+	geometry_msgs::Twist _cmdvel;
+	geometry_msgs::Twist _cmdvel_buff;
+	geometry_msgs::Twist _realvel;
+
+	float linear_factor_;
+	float argular_factor_left;
+	float argular_factor_right;
+
+	void velCallback(const geometry_msgs::Twist& cmdvel);
+	void velCallbackmanual(const geometry_msgs::Twist& cmd_vel_manual);
+	void led_command_Callback(const carbot_msgs::LedMsg& led_msg);
+	void ManualctrolCallback(const carbot_msgs::Manualcmd& manualcmd);
+	void controlstyleCallback(const std_msgs::String& controlstyle);
+	void powerstopCallback(const std_msgs::Bool& powerstop);
+	void taskgoalCallback(const std_msgs::String& taskgoal);
+	void scanstopCallback(const sensor_msgs::LaserScanConstPtr& scanstop);
+	void recvCallback(const sensor_msgs::PointCloud2ConstPtr& msg);
+	void move_recvCallback(const carbot_msgs::InspectInfo & msg);
+	void pose_attitude_recv(const std_msgs::String& pose_attitude);
+	void laser_state_recv(const std_msgs::String& laser_state);
+	__u8 crc_check(void* start_buffer,size_t size);
+	//void laserCB(const sensor_msgs::LaserScan::ConstPtr& laser_scan_data);
+
+	boost::mutex tc_lock_info_;
+	unsigned int ring_count_;
+	ros::Publisher pub_scan;
+	ros::Publisher obstacle_laser_pub;
+	ros::Publisher obstacle_ultrasonic_pub;
+	geometry_msgs::Vector3 obstacle_data;
+	geometry_msgs::Vector3 obstacle_ultrasonic_data;
+	//rospy.Subscriber("/control_style", String, self.controlstyleCallback)
+	void calc_speed();
+	//can接口
+
+public:
+	//	Candump candump;
+	//	Cansend cansend;
+	model_canopen imu_can;
+	can_frame frame_r[4];
+	can_frame frame_s;
+	can_filter filter[4];
+	int filter_start_id;
+	int filter_stop_id;
+	int filter_start_mask;
+	int filter_stop_mask;
+	int can_bitrate;
+
+	CallbackType _can_received_filter;
+	CallbackType _can_send_filter;
+	boost::thread * _can_received_thread;
+	boost::thread * _can_send_thread;
+
+	//CallbackType _imu_pub_filter;
+	//boost::thread * _imu_pub_thread;
+
+	void Can_Received();
+	void Can_Send();
+	//void Imu_Pub();
+
+//	__u8 rev_buf[128];
+//	__u8 send_buf[128];
+	__u8 led_buf[128];
+	__u8 battery_buf[128];
+
+	__u8 chassis_info[16];
+	__u8 ultra_info[16];
+
+	bool _has_Electricity;
+	bool _has_ChargeState;
+
+private:
+    //巡检消息
+	carbot_msgs::BatteryInfo _batteryinfo;
+	carbot_msgs::ControlInfo _controlInfo;
+	carbot_msgs::DriverInfo _driverInfo;
+	carbot_msgs::EquipmentInfo _equipmentInfo;
+	carbot_msgs::InspectInfo _InspectInfo;
+
+	ros::Publisher InspectInfo_pub;
+	ros::Publisher equipmentInfo_pub;
+	ros::Publisher driverInfo_pub;
+	ros::Publisher batteryinfo_pub;
+
+	ros::Publisher vel_pub_;
+	ros::Publisher control_style_pub;
+	ros::Publisher arrived_point_pub;
+	ros::Publisher feedback_msg_pub;
+	ros::Publisher delay_motion_time_pub;
+
+	ros::Subscriber vel_sub;
+	ros::Subscriber joy_sub;
+	ros::Subscriber led_command_sub;
+	ros::Subscriber manual_opration_sub;
+	ros::Subscriber control_style_sub;
+	ros::Subscriber power_stop_sub,task_goal_sub , task_arrived_sub;
+	ros::Subscriber scan_stop_sub;
+	ros::Subscriber pointcloud_sub;
+	ros::Subscriber move_info_sub;
+	ros::Subscriber planner_state_sub;
+	ros::Subscriber high_laser_state_sub;
+
+	std::string control_style;
+	std::string power_stop_;
+	std::string softkey_;
+	std::string taskgoal_;
+
+    float commond_linear_vel; //= 0.5
+	float commond_angular_vel;  //= 0.2
+    float target_linear_vel;  // = 0
+    float target_angular_vel; // = 0
+    float cmd_linear_vel;  // = 0
+	float cmd_angular_vel; // = 0
+    float control_linear_vel; // = 0
+    float control_angular_vel; // = 0
+
+	int send_len;
+	float left_speed;
+	float left_real_speed;
+	float right_speed;
+	float right_real_speed;
+	double left_actor;
+	double right_actor;
+	int ticks_meter;
+
+	float base_wide;
+	float wheel_lenght;
+
+	ros::Duration _duration;
+	ros::Duration  rate;
+	ros::Duration  rate_send;
+	ros::Duration  rate_request;
+	ros::Duration  rate_encoder;
+	ros::Duration  rate_ultra;
+
+	//定时器
+	double rate_vel;
+	double rate_send_vel;
+	double rate_request_vel;
+	double rate_encoder_vel;
+	double rate_ultra_vel;
+	double rate_battery_vel;
+
+	std::string dev_serial_rs485;
+	std::string dev_encoder_485;
+	std::string dev_battery_485;
+
+	int port_speed;
+	int encoder_port_speed;
+	int battery_port_speed;
+	//485
+	model_rs485 rs485;
+	model_rs485 encoder_485;
+
+    std::string _DockPile;
+    std::string _DockPoint;
+    std::string _Carport;
+
+	CallbackType _encoder485_received_filter;
+	CallbackType control_msg_wrapper_filter;
+	boost::thread * control_msg_wrapper_thread;
+	carbot_msgs::ControlInfo control_msg;
+	void control_msg_wrapper();
+
+	CallbackType control_msg_send_filter;
+	boost::thread * control_msg_send_thread;
+	void control_msg_send();
+
+	CallbackType feedback_msg_received_filter;
+	boost::thread * feedback_msg_received_thread;
+	carbot_msgs::FeedbackMsg _feedback_msg;
+	void feedback_msg_Received();
+
+	CallbackType feedback_msg_analysis_filter;
+	boost::thread * feedback_msg_analysis_thread;
+	void  feedback_msg_analysis();
+	ros::Subscriber feedback_msg_sub;
+	void  feedback_msg_suber(const carbot_msgs::FeedbackMsg& feedback_msg);
+
+    void slowdown(geometry_msgs::Twist& cmd_vel);
+    void stopcar(geometry_msgs::Twist& cmd_vel);
+
+    inline double sign(double x)
+    {
+      return x < 0.0 ? -1.0 : 1.0;
+    }
+	boost::mutex msg_send_mutex_;//rs_send_485端口 消息队列锁
+	boost::mutex msg_rev_mutex;//rs_rev_485端口 消息队列锁
+	boost::mutex carinfo_lock_info;
+	//imu
+	sensor_msgs::Imu imuMsg;
+	geometry_msgs::Vector3 yaw_data;
+	ros::Publisher imu_pub;
+	ros::Publisher imu_yaw_pub;
+	//上层雷达避障系统
+    double LObstacleStop_, LObstacleStop_left_, LObstacleStop_right_;
+    double LObstacleSlow_, LObstacleSlow_left_, LObstacleSlow_right_;
+    double LObstacle_front_sector_, LObstacle_left_sector_, LObstacle_right_sector_;
+    //上层激光雷达雷达数据
+	double obstacle_dis_laser_high;
+	//上线激光数据发布
+	ros::Publisher obstacle_pub;
+	ros::Publisher obstacle_stop_state_pub;
+	std::string planner_state;
+	std::string high_laser_state;
+	ros::Subscriber laser_scan_sub;
+	void laserCB(const sensor_msgs::LaserScan::ConstPtr& laser_scan_data);
+    //底层雷达障碍发布
+	ros::Publisher dock_pub;
+	//底层雷达测量角度
+	double LObstacle_low_sector_;
+	//底层雷达
+	double LObstacle_low_safe_dis;
+	double LObstacle_low_Stop_;
+	double LObstacle_low_Slow_;
+	double LObstacle_Ultrasonic_Stop_;
+	double LObstacle_Ultrasonic_Slow_;
+	//底层激光雷达数据
+	double obstacle_dis_laser_low;
+    //超声波避障数据
+	double ultrasonic_dis[5];
+	double ultrasonic_dis_front;
+	//防跌落遇障限制
+	int FP_Obstacle_Limit_1;
+	int FP_Obstacle_Limit_2;
+	int FP_Limit_;
+	int FP_Limit_Max_;
+
+	int ObstacleWarning;
+	//150*100遇障限制
+	double LowObstacle_Limit_;
+	bool LowObstacle_enable_;
+	bool FP_soft_enable_;
+	//前避障设置值
+	int FOBT_DIS_;
+	//线段信息
+	std::string _start_point_id;
+	std::string _end_point_id;
+	std::string _task_point_id;
+	std::string _task_Line_id;
+
+    double delay_time_;
+    double delay_factor_;
+    //速度参数
+    double max_vel_th_chassis_, min_vel_th_chassis_;
+    double max_vel_x_chassis_, min_vel_x_chassis_;
+    double acc_lim_xAD_chassis_, acc_lim_xDC_chassis_, acc_lim_theta_chassis_;
+
+    ros::ServiceClient client_delay_motion;
+    bool be_event_delay;
+    int event_limit_time;
+    //carbot_msgs::Delayaction srv;
+
+};
+}
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif

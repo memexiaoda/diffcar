@@ -1,0 +1,293 @@
+message StatMessage {  
+	required int32 Stat = 1;   //ֻ����ϵͳ����/����
+	optional LaserStat LaserMessage = 2;  //����ģ��״̬   ����
+	optional ElecStat ElecMessage = 3;    //���ģ��״̬ κ��
+	optional DriverControl DriverMessage = 4;  //�������ģ��״̬  κ��
+	optional CarGPS CarGPSMessage = 5;    //����GPSģ��״̬    ����
+	optional RoutePlanning RoutePlanningMessage = 6;  //RoutePlanningģ��״̬   ����
+	optional RobotCenter RobotCenterMessage = 7;   //RobotCenterģ��״̬    �ּ�
+	optional DataColltor DataColltorMessage = 8; //DataColltorģ��״̬    �ּ�
+	optional Error ErrorMessage = 9;   //����     
+
+	message LaserStat{
+		required int32 LocateStat = 1; //��λ״̬ 0=��Ч 1=��Ч
+		required string Token = 2; //�ƶ���������
+		required string CurLine= 3;//��ǰ��ID
+		required float CurLinePass= 4;//��ǰ�����߹��ľ���
+		optional float CurPose_x = 5; //��ǰ�������� LaserMap x����
+		optional float CurPose_y = 6; //��ǰ�������� LaserMap y����
+		optional float CurPose_th = 7;//��ǰ�������� LaserMap th����
+		optional int32 MobileStat = 8;//�˶�״̬ ֱ��,ת��,ͣ��
+		optional float CrosswiseError = 9;//����ƫ�뷶Χ
+		optional string NodesError = 10; //�ڵ����д���
+		optional float CurLineDone= 11;//��ǰ�����߹��ľ����100��
+		optional float Curx= 12;//��ǰ��X����
+		optional float  Cury= 13;//��ǰ��Y����
+		optional string Fname= 14;//��ʼ�����
+		optional string Fnameend= 15;//�յ����
+		optional string PosID= 16;//��ʼ��ID
+		optional int32 Charging = 17;
+	};
+
+	message ElecStat{
+		required int32 status=1;   //������״̬0 ���� 1 ����
+		optional string Token=2;   //����λ��  Elec 
+		optional int32 ElcRXFlag=3;   //���485ͨ�ű�־ 0 ʧ�� 1�ɹ�
+		optional int32 CurTask=4;   //��ǰ����
+		optional string CurElcIO=5;   //��Ŵ���������״̬
+		optional string CurElcdata=6;   //��Ŵ�����ͨ������
+		optional int32 CurElcDeadLine=7;   //��Ŵ�������ֵ
+
+	};
+
+	message DriverControl{
+		required int32 controller = 1;   //������״̬ RS485=1 ң��������=2 UNKNOW
+		required int32 CarRXFlag = 2;   //����485ͨ�ű�־ 0 ʧ�� 1�ɹ�
+		required int32 ChargFlag = 3;   //@����־ 1 ��� 0 �ŵ� 2 �͵�������
+		required string Token = 4;   //����λ��  ����
+		optional CarRecvInfo carinfo = 5;	
+		optional string CarRunStat = 6;   //�����˶�״̬
+		optional int32 BMS_SOC=7;    //��ص���
+		optional float BMS_Voltage=8;  //��ص�ѹ
+		optional float BMS_Current=9;  //��ص���
+		optional int32 BMS_Temperature=10;  //����¶�
+		optional string CurPoint=11;   //�����
+		optional string Curline=12;    //�ֲ��߶�
+		optional float Curlinepass=13;    //ʻ�뵱ǰ��ľ���
+		optional int32 Laser_range=14;  //�������ֵ
+		optional int32 obstacle_flag=15;  //0���ϰ���  1 ���ϰ���
+		optional DcSys_Error error=16;   //��������쳣��Ϣ Ԥ��
+		optional float leftspeed=17;  //�����ٶ�
+		optional float rightspeed=18;  //�����ٶ�
+		optional float speed=19;  //����ǰ���ٶ�
+		optional int32 islaseron=20;  //�����Ƿ�����
+		optional int32 basespeed=21;  //�����߻����ٶ�
+		optional int32 baseangel=22;  //�����߻������ٶ�
+	};
+
+	message CarGPS{
+		optional string area = 1;        //������ͼʱ��ȡ�ĸ���GPS��Ϣ�����״ﴴ���ĵ�ͼͨ��Э���ʽ����һ���������ŵĵ�ͼ�����������ݿ⡣areaͨ����ǰGPSλ��ת��Ϊ��ͼ�������� 
+		optional int32 IsLocation = 2;     //�Ƿ�λ
+
+	};
+
+	message RoutePlanning{
+		optional string Token = 1;   //����λ��  DriverControl  Elec  Laser
+		optional LaserStat LaserMessage = 2;
+		optional ElecStat ElecMessage = 3;
+		optional DriverControl DriverMessage = 4;
+		optional CarGPS CarGPSMessage = 5;
+		optional Position PositionInfo = 6;
+		optional int32 BarrierStop = 7;  //�ϰ���ͣ��
+	};
+ 	
+ 	message Position{
+ 		optional string PositionId = 1;   //���id
+		optional string Positionfname = 2;   //���fname
+		optional int32 IsInGarage = 3;   //�Ƿ��ڳ�����  0=�� 1=��
+		optional string CurLine = 4;  //��ǰ�н����߶� �߱�id
+		optional int32 CurLineDone = 5; //��ǰ�н��߶���ɵİٷֱ�0-100
+		optional string FinishGoal = 6;//����Ŀ�ĵ�id
+
+ 	}
+ 	message DataColltor{
+ 		required int32 Stat = 1;   //ֻ����ϵͳ����/�쳣
+ 		required int32 YunTaiOnLine = 2;    //��̨����״̬
+ 		required int32 ZigbbeOnLine = 3;   //���Ƴ����ŵ�zigbee����״̬
+ 		required int32 IRCameraOnLine = 4;  //�����������״̬
+ 		required int32 VisCameraOnline = 5;   //�ɼ����������״̬
+		optional int32 Horizontal = 6;    //��̨ˮƽ��Ϣ
+		optional int32 Vertical = 7;     //��̨��ֱ��Ϣ
+		optional int32 Zoom = 8;     //���������Ϣ
+ 	};
+
+	message RobotCenter{
+ 		required int32 Stat = 1;   //ֻ����ϵͳ����/�쳣
+		optional RoutePlanning RoutePlanningMessage =2;
+		optional DataColltor DataColltorMessage = 3;
+		required string DataBaseUpdatedStat = 4;      //���ݿ�ͬ��״̬
+		required string InspectPlanId = 5;   //Ѳ��PlanId ��Ϊû��Ѳ��
+		optional string InspectStat = 6;  //Ѳ��״̬ "doing"Ϊ����Ѳ�� "pause"Ϊ��ͣѲ��  ""Ϊû��Ѳ�����ֹͣ
+	};
+
+	message Error{
+		optional int32 YunTaiOnLineError = 1;    	//��̨����   ��DataCollect����
+		optional int32 ZigbbeOnLineError = 2;   	//���Ƴ����ŵ�zigbee����   ��DataCollect����
+		optional int32 HongWaiOnLineError = 3;  	//�����������   ��DataCollect����
+		optional int32 ElecLostLineError = 4;    	//������뵼����   ��DataCollect����
+		optional int32 CarLeftDriverError = 5;   	//��������������   ��RoutePlanning����
+		optional int32 CarRightDriverError = 6;  	//��������������    ��RoutePlanning����
+		optional int32 ElecOnline = 7;      		//��Ŵ���������   ��RoutePlanning����
+		optional int32 PowerSysError = 8;   		//����ϵͳ����   ��RoutePlanning����
+		optional int32 ControlSysError = 9;      	//����ϵͳ����   ��RoutePlanning����
+		optional int32 LaserOnlineError = 10;   	//����Ӳ������   ��RoutePlanning����
+		optional int32 VisCameraOnlineError = 11;   //�ɼ����������   ��DataCollect����
+		optional int32 CarConnectError = 12;		//����ͨ�Ź���   ��RoutePlanning����
+		optional int32 CarGPSOnlineError = 13;		//����GPS����   ��RoutePlanning����
+
+		optional int32 ElecComError = 14;			//��������  ��RoutePlanning����
+		optional int32 LaserComError = 15;			//��������  ��RoutePlanning����
+		optional int32 DriverControl = 16;			//��������  ��RoutePlanning����
+		optional int32 CarGPSComError = 17;		//��������  ��RoutePlanning����
+
+		optional int32 DataCollectComError = 18;	//��������  ��RobotCenter����
+		optional int32 RoutePlanningComError = 19;	//��������  ��RobotCenter����
+		//Ƿѹ���� ��RoutePlanning����
+
+		optional int32 low_Voltage_alarm=20;
+		//�͵������� ��RoutePlanning����
+
+		optional int32 low_BmsSoc_alarm=21;
+	};
+
+ 	message CarRecvInfo{
+		required int32 SYS_Version=1;    //��ǰ�汾   
+		optional int32 SYS_Controller=2;  //��ǰ��Ч������
+		optional int32 SYS_Temperature=3; //�������¶�
+		optional int32 SYS_Humidity=4;    //������ʪ��
+
+		optional int32 BMS_SOC=5;    //��ص���
+		
+		optional float BMS_Voltage=6;  //��ص�ѹ
+		optional float BMS_Current=7;  //��ص���
+		
+		optional int32 BMS_Temperature=8;  //����¶�
+		
+		//UINT8   BMS_status;   //BMS״̬
+		optional int32 BMS_status_Charge_Touch=9; //���������״̬
+		optional int32 BMS_status_Charge_Connect=10; //���״̬
+		optional int32 BMS_status_Emergency_Status=11;//��ͣ����״̬
+		optional int32 BMS_status_Switch_Status=12; //��Դ����״̬
+		optional int32 BMS_status_Motor24_Status=13; //�����Դ״̬
+		optional int32 BMS_status_SYS24_Status=14; //ϵͳ��Դ״̬
+		optional int32 BMS_status_Heat_Status=15; //����״̬
+		optional int32 BMS_status_Fan_Status=16; //����״̬
+
+		
+		//UINT8   BMS_error;    //BMS����
+		optional int32 BMS_error_Voltage_Alarm=17;//��ѹ����
+		optional int32 BMS_error_Voltage_Error=18;//��ѹ����
+		optional int32 BMS_error_Current_Alarm=19;       //��������
+		optional int32 BMS_error_Current_Error=20;//��������
+		optional int32 BMS_error_Temperature_Alarm=21;//�¶ȱ���
+		optional int32 BMS_error_Temperature_Error=22;//�¶ȴ���
+		optional int32 BMS_error_SOC_Alarm=23;       //��������
+		optional int32 BMS_error_SOC_Error=24;       //��������
+		
+		
+		optional int32 L_Encoder=25;  //����������
+		optional int32 R_Encoder=26; //�ҵ�������� 
+		
+
+		optional int32 L_Motor_Status=27;  //����������״̬��Ϣ
+		optional int32 R_Motor_Status=28;  //�ҵ��������״̬��Ϣ
+		
+
+		optional int32 L_motor_errorD1=29;  //�������������Ͼ�����Ϣ
+		optional int32 L_motor_errorD2=30;
+		optional int32 R_motor_errorD1=31;  //�ҵ�����������Ͼ�����Ϣ
+		optional int32 R_motor_errorD2=32;
+		
+
+		optional int32 Lift_Hight=33;   //����̨�߶���Ϣ
+		optional int32 U1_Distance=34;  //������1������Ϣ
+		optional int32 U2_Distance=35;  //������2������Ϣ
+		optional int32 U3_Distance=36;  //������3������Ϣ
+		optional int32 U4_Distance=37;   //������4������Ϣ
+
+
+		//UINT8   obstacle_mode; //����ģ��
+		optional int32 obstacle_mode_bit0_Cash=38;                    //����ײ����״̬
+		optional int32 obstacle_mode_bit1_IR1=39;                     //���⴫����1״̬
+		optional int32 obstacle_mode_bit2_IR2=40;                     //���⴫����2״̬
+		optional int32 obstacle_mode_bit3_IR3=41;                     //���⴫����3״̬
+		optional int32 obstacle_mode_bit4_F=42;                      //ǰ���Ϲ���
+		optional int32 obstacle_mode_bit5_B=43;                      //����Ϲ���
+		optional int32 obstacle_mode_bit6_Limitspeed=44;              //����״̬
+		optional int32 obstacle_mode_bit7_stop=45;                     //ɲ��״̬
+		                       
+
+		optional float   IMU_mode_AZ=46;  //����
+
+		optional float   IMU_mode_AX=47;  //����
+
+		optional float   IMU_mode_AY=48;  //����
+
+
+
+		optional int32 other_info=49; // ����״̬��Ϣ
+		optional int32 other_info_bit0_LED=50;					//ָʾ��״̬
+		optional int32 other_info_bit1_cFAN=51;					//���������
+		optional int32 other_info_bit2_mFAN=52;					//�������
+		optional int32 other_info_bit3_bee=53;				//����������
+							//
+		optional int32 RF_Channel=54;  //����ͨ��
+		optional int32 RF_switch=55;   //ң������Ϣ
+		optional int32 RF_switch_bit0_S1=56;					//ҡͷ����S1���ӿ���
+		optional int32 RF_switch_bit1_S2=57;					//ҡͷ����S2
+		optional int32 RF_switch_bit2_S3=58;					//ҡͷ����S3
+		optional int32 RF_switch_bit3_S4=59;					//ҡͷ����S4
+		optional int32 RF_switch_bit4_S5=60;					//��ť����S5
+		optional int32 RF_switch_bit5_S6=61;					//��ť����S6
+							
+
+
+		//optional int32 RF_channel_switch;
+		optional int32 channel_switch_bit0_D1=62;				//���뿪��D1
+		optional int32 channel_switch_bit1_D2=63;				//���뿪��D2
+		optional int32 channel_switch_bit2_D3=64;				//���뿪��D3
+		optional int32 channel_switch_bit3_D4=65;				//���뿪��D4
+		optional int32 channel_switch_bit4_D5=66;				//���뿪��D5
+		optional int32 channel_switch_bit5_D6=67;				//���뿪��D6
+		optional int32 channel_switch_bit6_D7=68;				//���뿪��D7
+		optional int32 channel_switch_bit7_D8=69;				//���뿪��D8
+							
+		optional int32 RF_JoystickL_X=70;	 //��ҡ��X��λ��
+		optional int32 RF_JoystickL_Y=71;	 //��ҡ��Y��λ��
+		optional int32 RF_JoystickR_X=72;	 //��ҡ��X��λ��
+		optional int32 RF_JoystickR_Y=73;	 //��ҡ��Y��λ��
+		
+		optional int32 RF_Potentiometer=74;  //��ť��λ��λ��
+		
+		//UINT8   RF_communicate_status; 		//ͨ��״̬
+		optional int32 CS_bit0_RF=75;					//����ģ��ͨ��״̬
+		optional int32 CS_bit1_BMS=76;					//BMSͨ��״̬
+		optional int32 CS_bit2_Ldevice=77;				//��������ͨ��״̬
+		optional int32 CS_bit3_Rdevice=78;					//��������ͨ��״̬
+		optional int32 CS_bit4_lift=79;					//����̨ͨ��״̬
+		optional int32 CS_bit5_obstacle=80;					//������ͨ��״̬
+		optional int32 CS_bit6_IMU=81;					//IMUͨ��״̬
+							
+
+		//UINT8   SYS_Error;  //ϵͳ����
+		optional int32 SYS_Error_bit0_BMSerror=82; //BMS����
+		optional int32 SYS_Error_bit1_Leftdeviceerror=83;//������������
+		optional int32 SYS_Error_bit2_Rightdeviceerror=84;//������������
+		optional int32 SYS_Error_bit3_lifterror=85;//����̨����
+		optional int32 SYS_Error_bit4_obstacleerror=86;//�ϰ��ﱨ��
+		optional int32 SYS_Error_bit5_hightTPerror=87;//���±���
+		optional int32 SYS_Error_bit6_lowTPerror=88;//���±���
+		optional int32 SYS_Error_bit7_hightHumidityerror=89;//��ʪ�ȱ���
+		
+	};
+	message DcSys_Error{
+		//�ϰ���ͣ��
+		 required int32  obstacle_stop=1;
+		//����������ͣ��
+		 required int32  driver_faultstop=2;
+		//��������ͣ��
+		 required int32  Current_overloadstop=3;
+		//BMS���±���ͣ��
+		required int32 BMS_High_temperature_stop=4;
+		//��ͣ���ش�ͣ��
+		required int32 Emergency_Status_stop=5;
+		//ң��������
+		required int32 remoter_connect=6;
+		//��������±���
+		required int32 High_temperature_stop=7;
+		//Ƿѹ����
+		optional int32 low_Voltage_alarm=8;
+		//�͵�������
+		optional int32 low_BmsSoc_alarm=9;
+	};
+};  

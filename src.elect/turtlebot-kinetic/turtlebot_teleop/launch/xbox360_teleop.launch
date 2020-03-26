@@ -1,0 +1,35 @@
+<launch>
+  <!--
+    Push the left frontal button labeled as 'LB' to activate cmd_vel publishing.
+    Move the left stick around to control the velocity.
+   -->
+  <!--  smooths inputs from cmd_vel_mux/input/teleop_raw to cmd_vel_mux/input/teleop -->
+  <!-- <include file="$(find turtlebot_teleop)/launch/includes/velocity_smoother.launch.xml"/> -->
+
+  <node pkg="turtlebot_teleop" type="turtlebot_teleop_joy" name="turtlebot_teleop_joystick"  output="screen">
+    <param name="scale_angular" value="0.3"/>
+    <param name="scale_linear" value="0.4"/>
+    <param name="axis_linear_max" value="1.5"/>
+    <param name="axis_angular_max" value="0.6"/>
+    <param name="vel_step_l" value="0.05"/>
+    <param name="vel_step_a" value="0.05"/>
+    
+    <param name="axis_linear" value="1"/>
+    <param name="axis_angular" value="0"/>
+    <param name="axis_deadman" value="3"/>
+    <param name="axis_joy_switch_open" value="4"/>
+    <param name="axis_joy_switch_close" value="5"/>
+    <param name="axis_linear_desc" value="16"/>
+    <param name="axis_linear_add" value="15"/>
+    <param name="axis_angular_desc" value="14"/>
+    <param name="axis_angular_add" value="13"/>
+    
+    <!-- <remap from="turtlebot_teleop_joystick/cmd_vel" to="teleop_velocity_smoother/raw_cmd_vel"/> -->
+    <remap from="turtlebot_teleop_joystick/cmd_vel_manual" to="cmd_vel_manual"/>
+  </node>
+
+  <node pkg="joy" type="joy_node" name="joystick">
+  	<param name="dev" value="/dev/input/js0"/>
+  	<param name="autorepeat_rate" value="20"/>
+  </node>
+</launch>

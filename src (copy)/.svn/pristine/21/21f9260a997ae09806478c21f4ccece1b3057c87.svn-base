@@ -1,0 +1,8 @@
+bool Overtime
+int32 Limit_time
+string Task_goal
+string Arrived_goal
+string Current_lineID
+---
+string Move_state
+bool Delay_motion_state

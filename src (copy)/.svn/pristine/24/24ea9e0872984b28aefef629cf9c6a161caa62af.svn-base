@@ -1,0 +1,457 @@
+#!/usr/bin/env python
+# -*- coding:utf-8 -*-
+#from rospy.timer import sleep
+
+
+""" nav_square.py - Version 1.1 2013-12-20
+
+    A basic demo of the using odometry data to move the robot
+    along a square trajectory.
+
+    Created for the Pi Robot Project: http://www.pirobot.org
+    Copyright (c) 2012 Patrick Goebel.  All rights reserved.
+
+    This program is free software; you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation; either version 2 of the License, or
+    (at your option) any later version.5
+    
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details at:
+    
+    http://www.gnu.org/licenses/gpl.html
+      
+"""
+
+import rospy
+from geometry_msgs.msg import Twist, Point, Quaternion,Vector3
+import tf
+from transform_utils import quat_to_angle, normalize_angle
+from numpy import sign
+#from tf.broadcaster import TransformBroadcaster
+#from nav_msgs.msg import Odometry
+from math import radians, sqrt, pow, pi,sin,cos,asin
+from numpy import sign
+from visualization_msgs.msg import Marker
+import zmq
+from PackageMessage_pb2 import PackageMessage
+import uuid
+import time
+from std_msgs.msg import String
+from AllParameter import SERVICEPUBIP, SERVICESUBIP, AllTopic, ORDER, SENDER, RECVER
+
+
+
+class PIDCONTRL():
+    def __init__(self):
+        self.Perror = 0.0
+        self.PrevErr = 0.0
+        self.Ierror = 0.0
+        self.Poutput = 0.0
+    
+class ControlCar():
+    def __init__(self):
+        # Give the node a name
+        #rospy.init_node('ControlCar', anonymous=False)         
+        # Set rospy to execute a shutdown function when terminating the script
+        #rospy.on_shutdown(self.shutdown)        
+        # How fast will we check the odometry values?
+        rate = 10
+        self.StLineSpeed = 0.0
+        self.StAngleSpeed = 0.0
+        # Set the equivalent ROS rate variable
+        self.r = rospy.Rate(rate)
+        self.max_speed = rospy.get_param('LaserControl/max_speed', 0.5)                                    #最大线速度
+        self.min_speed = rospy.get_param('Lasercontrol/min_speed', 0.05)                     #最小线速度
+        self.angular_speed = rospy.get_param('Lasercontrol/ang_speed', 0.1)    # radians per second
+        self.distance_slow = rospy.get_param('Lasercontrol/distance_slow', 1) #减速距离
+        self.Kp = rospy.get_param('arbotix/controllers/base_controller/Kp', 5)
+        self.Kd = rospy.get_param('arbotix/controllers/base_controller/Kd', 1)
+        self.Ki = rospy.get_param('arbotix/controllers/base_controller/Ki', 0)
+        self.Ko = rospy.get_param('arbotix/controllers/base_controller/Ko', 50)
+        #self.Kp = 12 #rospy.get_param('arbotix/controllers/base_controller/Kp', 5)
+        #self.Kd = 12#rospy.get_param('arbotix/controllers/base_controller/Kd', 1)
+        #self.Ki = 0#rospy.get_param('arbotix/controllers/base_controller/Ki', 0)
+        #self.Ko = 50#rospy.get_param('arbotix/controllers/base_controller/Ko', 50)
+        
+        self.tf_listener = tf.TransformListener()
+        
+        self.MaxOutput = 0.3 #0.07                    #PID最大误差值
+            
+        # Set the parameters for the target square
+        #self.angular_speed = rospy.get_param("~angular_speed", 0.1)      # radians per second
+        #self.angular_tolerance = rospy.get_param("~angular_tolerance", radians(0.1)) # degrees to radians
+        self.angular_tolerance = radians(0.1) # degrees to radians
+        
+        # Publisher to control the robot's speed
+        self.cmd_vel = rospy.Publisher('/cmd_vel', Twist, queue_size=5)
+        #self.cmd_vel = rospy.Publisher('/cmd_vel', Twist)
+        # The base frame is base_footprint for the TurtleBot but base_link for Pi Robot
+        #self.base_frame = rospy.get_param('~base_frame', '/base_link')
+        self.base_frame = '/base_link'
+
+        # The odom frame is usually just /odom
+        #self.odom_frame = rospy.get_param('~odom_frame', '/map')
+        # Set the odom frame
+        self.odom_frame = '/map'
+        # Find out if the robot uses /base_link or /base_footprint
+        self.base_frame = self.find(self.odom_frame)
+        time.sleep(0.01)
+        self.con = zmq.Context()
+        self.PublishMsg = PackageMessage()
+        self.Token = "Laser"
+        self.ErrorDisPub = rospy.Publisher("ErrDistance", String,queue_size=5)
+        self.obstacle_flag = False
+    def zmqpubcon(self):
+        self.sock = self.con.socket(zmq.PUB)
+        self.sock.connect(SERVICEPUBIP)
+    def Pubmsg(self):
+        self.PublishMsg.Clear()
+        self.PublishMsg.SessionId = "%s" %uuid.uuid1()
+        self.PublishMsg.Time = int(time.time() * 100000000)
+        self.PublishMsg.From = SENDER
+        self.PublishMsg.To = RECVER[0]
+        self.PublishMsg.CallMessage.Function = ORDER[0]
+        
+    def zmqsubcon(self):
+        self.subsock = self.con.socket(zmq.SUB)
+        self.subsock.connect(SERVICESUBIP)
+        self.subsock.setsockopt(zmq.SUBSCRIBE,AllTopic[0])
+    def recvmsg(self,sendsessionid):
+        recvmsg = PackageMessage()
+        for k in range(5):
+            try:
+                topic,re,msg = self.subsock.recv_multipart()
+                if msg != None:
+                    recvmsg.ParseFromString(msg)
+                    if recvmsg.To == SENDER and recvmsg.SessionId == sendsessionid: 
+                        if recvmsg.ResultMessage.ErrorCode != 0:
+                            print recvmsg.ResultMessage.ErrorCode
+                        break
+                    else:
+                        continue
+                else:
+                    print "Recvmessage is NULL!" 
+            except Exception as err:
+                print err          
+
+    def Start_Speed(self,data):
+        self.StLineSpeed = data.x
+        self.StAngleSpeed = data.z
+    def TokenCallBack(self,data):
+            if data.data != "":
+                self.Token = data.data
+    def keep_line(self,lastgoal,goal,work,stop,rfid):
+        move_cmd = Twist()
+        position = Point()
+        th_pid = PIDCONTRL()
+        dis_pid = PIDCONTRL() 
+        (position, rotation) = self.get_odom()
+        start = Point()       
+        start = lastgoal
+        th_start = rotation 
+        #rospy.Subscriber('dxdrpub', Vector3, self.Start_Speed)
+        move_cmd.linear.x = self.StLineSpeed
+        move_cmd.angular.z = self.StAngleSpeed
+        distance = 0.0
+        distance_overplus = 0.0
+        goal_distance = sqrt(pow(goal.x - start.x,2) + pow(goal.y - start.y,2))
+        path_rot = self.cal_path_rotation(start.x,start.y,th_start,goal.x,goal.y) 
+        #path_rot = th_start
+        distance_overplus = sqrt(pow(goal.x-position.x,2) + pow(goal.y-position.y,2))
+        # Enter the loop to move along a side
+        #while distance < goal_distance and not rospy.is_shutdown():
+        #
+        #self.turn_angle(goal)
+        self.zmqpubcon()
+        self.zmqsubcon()
+        rospy.Subscriber("TokenPose", String,self.TokenCallBack)
+        #while distance < goal_distance  and not rospy.is_shutdown():    
+        #while distance_overplus > 0.02 and not rospy.is_shutdown():
+        while not rospy.is_shutdown():
+            #if distance > (goal_distance+0.01) or self.Token == "DriverControl" or self.Token=="Laser_manual" :
+            if self.Token == "DriverControl" or self.Token=="Laser_manual" :
+                #print distance_overplus
+                break    
+            #====================================================================================
+            if distance_overplus <= self.distance_slow and stop == 1:
+                if self.min_speed < move_cmd.linear.x:
+                    move_cmd.linear.x = max(self.min_speed,move_cmd.linear.x - 0.02)
+                else:
+                    if distance_overplus > 0.02:
+                        if distance > (goal_distance+0.01):
+                            move_cmd.linear.x = 0.0
+                            if abs(th_pid.Perror) < 0.01:
+				print "goal distance=%f" %distance_overplus 
+                                break
+                        else:
+                            move_cmd.linear.x = max(self.min_speed,move_cmd.linear.x)
+                    else:
+                        move_cmd.linear.x = 0.0
+                        if abs(th_pid.Perror) < 0.01:
+			    print "goal distance=%f" %distance_overplus 
+                            break
+            else:
+                if self.max_speed < move_cmd.linear.x:
+                    move_cmd.linear.x = max(self.max_speed,move_cmd.linear.x - 0.02)#0.02
+                else:
+                    if distance > (goal_distance+0.01):
+                        break
+                    else:
+                        move_cmd.linear.x = min(self.max_speed,move_cmd.linear.x + 0.02)
+            # Publish the Twist message and sleep 1 cycle         
+            #(position, rotation) = self.get_odom()
+            #dis_pid.Perror = -dis_pid.Perror
+            th_pid.Perror = -th_pid.Perror
+            if move_cmd.linear.x == 0.0:
+                error_th = 1.5 * self.CacPid(th_pid)
+            else:
+                error_th = self.CacPid(dis_pid) + 1.5*self.CacPid(th_pid)             
+            move_cmd.angular.z = error_th
+	    if self.obstacle_flag == False:
+            	self.cmd_vel.publish(move_cmd)
+            	self.Pubmsg()
+            	self.PublishMsg.CallMessage.Parameters.append("%d" %(move_cmd.linear.x *100))
+            	self.PublishMsg.CallMessage.Parameters.append("%d" %(-move_cmd.angular.z *100))
+            	self.sock.send_multipart([AllTopic[3], "\0", self.PublishMsg.SerializeToString()])
+            #self.recvmsg(self.PublishMsg.SessionId)
+            #print self.PublishMsg
+            #===================================================================================
+            self.r.sleep()
+            (position, rotation) = self.get_odom()
+            if position == None or rotation == None:
+                self.carstop()
+                self.Pubmsg()
+                self.PublishMsg.To = RECVER[1]
+                self.PublishMsg.CallMessage.Function = ORDER[13]
+                self.PublishMsg.CallMessage.Parameters.append(str(rfid))
+                self.sock.send_multipart([AllTopic[0], "\0", self.PublishMsg.SerializeToString()])
+                SendError = String()
+                SendError = "0.0:stop"
+                self.ErrorDisPub.publish(SendError)
+                return
+            th_pid.Perror = rotation - path_rot
+            if th_pid.Perror >= pi:
+                th_pid.Perror -= pi*2
+            elif th_pid.Perror < -pi:
+                th_pid.Perror += pi*2
+            else:
+                th_pid.Perror = th_pid.Perror
+            dis_pid.Perror = self.cal_distance(position.x, position.y, start.x, start.y, goal.x, goal.y)
+            
+            distance_overplus = sqrt(pow(goal.x-position.x,2) + pow(goal.y-position.y,2))
+            # Compute the Euclidean distance from the start
+            distance = sqrt(pow((position.x - start.x), 2) + 
+                        pow((position.y - start.y), 2))
+            SendError = String()
+            SendError = "%.2f:%s" %(error_th,work)
+            print "++++++++++++++++++++++++++++++++++++++++++++++++   %.2f" %dis_pid.Perror
+            self.ErrorDisPub.publish(SendError)
+        if stop == 1:
+            self.carstop()
+            #self.turn_angle(lastgoal, goal)
+        self.Pubmsg()
+        self.PublishMsg.To = RECVER[1]
+        self.PublishMsg.CallMessage.Function = ORDER[1]
+        self.PublishMsg.CallMessage.Parameters.append(str(rfid))
+        self.sock.send_multipart([AllTopic[0], "\0", self.PublishMsg.SerializeToString()])
+        SendError = String()
+        SendError = "0.0:stop" 
+        self.ErrorDisPub.publish(SendError)
+        #self.cmd_vel.publish(Twist()) 
+        #print self.PublishMsg
+        return 
+        rospy.spin()  
+            
+    def turn_angle(self,lastgoal,goal):
+        move_cmd = Twist()
+        position = Point()
+        turn_angle = 0
+        (position,rotation) = self.get_odom()
+        last_angle = rotation
+        path_rot = self.cal_path_rotation(lastgoal.x,lastgoal.y,rotation,goal.x,goal.y)  
+        goal_angle = path_rot - rotation                   
+        if goal_angle >= pi:
+            goal_angle -= (2*pi)
+            move_cmd.angular.z = -self.angular_speed
+        elif goal_angle < -pi:
+            goal_angle += (2*pi)
+            move_cmd.angular.z = self.angular_speed
+        else:
+            move_cmd.angular.z = sign(goal_angle)*self.angular_speed 
+        self.zmqpubcon()
+        self.zmqsubcon()
+        self.carstop() 
+        while abs(turn_angle + self.angular_tolerance) < abs(goal_angle) and not rospy.is_shutdown():
+            # Publish the Twist message and sleep 1 cycle         
+            self.cmd_vel.publish(move_cmd)
+            self.Pubmsg()
+            self.PublishMsg.CallMessage.Parameters.append("%d" %(move_cmd.linear.x *100))
+            self.PublishMsg.CallMessage.Parameters.append("%d" %(-move_cmd.angular.z *100))
+            self.sock.send_multipart([AllTopic[3], "\0", self.PublishMsg.SerializeToString()])
+            #self.recvmsg(self.PublishMsg.SessionId)       
+            self.r.sleep()
+            # Get the current rotation
+            (position, rotation) = self.get_odom()
+            if position == None or rotation == None:
+                break   
+            # Compute the amount of rotation since the last lopp
+            delta_angle = normalize_angle(rotation - last_angle)       
+            turn_angle += delta_angle
+            last_angle = rotation
+        self.carstop() 
+#         self.Pubmsg()
+#         self.PublishMsg.To = RECVER[1]
+#         self.PublishMsg.CallMessage.Function = ORDER[1]
+#         self.PublishMsg.CallMessage.Parameters.append("laserdone")
+#         self.sock.send_multipart([AllTopic[1], "\0", self.PublishMsg.SerializeToString()])
+
+    def carstop(self):
+        self.cmd_vel.publish(Twist())
+        self.Pubmsg()
+        self.PublishMsg.CallMessage.Parameters.append("0")
+        self.PublishMsg.CallMessage.Parameters.append("0") 
+        self.sock.send_multipart([AllTopic[3], "\0", self.PublishMsg.SerializeToString()])
+    def slowdown(self):
+	slowspeed = Twist()
+	slowspeed.linear.x = self.min_speed
+	slowspeed.augular.x = 0.0
+	self.cmd_vel.publish(slowspeed)
+	self.Pubmsg()
+	self.PublishMsg.CallMessage.Parameters.append("%d" %(slowspeed.linear.x *100))
+        self.PublishMsg.CallMessage.Parameters.append("%d" %(-slowspeed.angular.z *100))
+        self.sock.send_multipart([AllTopic[3], "\0", self.PublishMsg.SerializeToString()])
+#         self.recvmsg(self.PublishMsg.SessionId)    
+    def find(self,odom_frame):
+        try:
+            self.tf_listener.waitForTransform(odom_frame, '/base_footprint', rospy.Time(), rospy.Duration(1.0))
+            base_frame = '/base_footprint'
+            return base_frame       
+        except (tf.Exception, tf.ConnectivityException, tf.LookupException):
+            try:
+                self.tf_listener.waitForTransform(odom_frame, '/base_link', rospy.Time(), rospy.Duration(1.0))
+                base_frame = '/base_link'
+                return base_frame
+            except (tf.Exception, tf.ConnectivityException, tf.LookupException):
+                rospy.loginfo("Cannot find transform between /odom and /base_link or /base_footprint")
+                rospy.signal_shutdown("tf Exception")     
+                base_frame = '/base_link'
+                return base_frame
+    def get_odom(self):
+        # Get the current transform between the odom and base frames
+        try:
+            (trans, rot)  = self.tf_listener.lookupTransform(self.odom_frame, self.base_frame, rospy.Time(0))
+        except (tf.Exception, tf.ConnectivityException, tf.LookupException):
+            rospy.loginfo("TF Exception")
+            trans = None
+            rot = None
+            return (trans, rot)
+        return (Point(*trans), quat_to_angle(Quaternion(*rot)))  
+    def shutdown(self):
+        # Always stop the robot when shutting down the node
+        rospy.loginfo("Stopping the robot...")
+        self.cmd_vel.publish(Twist())
+        rospy.sleep(1)   
+    #计算当前点与路径直线间的距离和位移夹角            
+    def cal_distance(self, xcur, ycur,startpose_x,startpose_y,nextpose_x,nextpose_y):
+        a_x = nextpose_x- startpose_x
+        a_y = nextpose_y- startpose_y
+        if nextpose_x== startpose_x:
+            if a_x ==0 and a_y >= 0:
+                ptl = xcur - nextpose_x
+            else:
+                ptl = nextpose_x- xcur
+        else:
+            K = (nextpose_y- startpose_y)/(nextpose_x- startpose_x)
+            B = (nextpose_x*startpose_y - startpose_x*nextpose_y)/(nextpose_x- startpose_x)
+            if (a_x>=0 and a_y>=0) or (a_x>=0 and a_y<=0):
+                if (-K*xcur + ycur - B) > 0:
+                    ptl = -abs(-K*xcur + ycur - B)/sqrt(pow(-K,2) + 1)    
+                else:
+                    ptl = abs(-K*xcur + ycur - B)/sqrt(pow(-K,2) + 1)    
+            else:
+                if (-K*xcur + ycur - B) > 0:
+                    ptl = abs(-K*xcur + ycur - B)/sqrt(pow(-K,2) + 1)    
+                else:
+                    ptl = -abs(-K*xcur + ycur - B)/sqrt(pow(-K,2) + 1)    
+        #print "====%f" %(ptl)
+        return ptl
+    
+    #计算路径与地图正方向间夹角
+    def cal_path_rotation(self,xcur,ycur,thcur,nextpose_x,nextpose_y):
+        #路径直线函数
+        A = nextpose_y-ycur
+        B = -(nextpose_x-xcur)
+        C = nextpose_x*ycur-xcur*nextpose_y
+        #计算下一条路径直线和全局正方间的夹角 (规定正方向向量（xcur+1,ycur）)
+        prodis = sqrt(pow(nextpose_x-xcur,2)+pow(nextpose_y-ycur,2))
+        curdis = 1
+        dot_product = (nextpose_x-xcur)
+        dif_product = (nextpose_y-ycur)
+        
+        if prodis==0 or curdis==0:
+            cosm = cos(thcur)
+            sinm = sin(thcur)
+        else:
+            cosm = dot_product / (prodis*curdis)
+            sinm = dif_product / (prodis*curdis)
+            
+        if cosm >= 0:
+            path_th = asin(sinm)
+        else:
+            if sinm >=0:
+                path_th = pi - asin(sinm)
+            else:
+                path_th = -pi - asin(sinm)
+        return path_th
+        
+    def CacPid(self, pt):
+        
+        Perror = pt.Perror
+        output = (self.Kp*Perror + self.Kd*(Perror - pt.PrevErr) + self.Ki*pt.Ierror)/self.Ko
+        pt.PrevErr = Perror    
+        
+        #output = output + pt.Poutput
+        if output >= self.MaxOutput:
+            output = self.MaxOutput
+        elif output < -self.MaxOutput:
+            output = -self.MaxOutput
+        else:
+            pt.Ierror = pt.Ierror + Perror
+            
+        pt.Poutput = output
+        #print pt,output
+        return output
+    def init_markers(self):
+        # Set up our waypoint markers
+        marker_scale = 0.2
+        marker_lifetime = 0 # 0 is forever
+        marker_ns = 'waypoints'
+        marker_id = 0
+        marker_color = {'r': 1.0, 'g': 0.7, 'b': 1.0, 'a': 1.0}
+        
+        # Define a marker publisher.
+        self.marker_pub = rospy.Publisher('visualization_marker', Marker, queue_size=5) # waypoint_markers
+        
+        # Initialize the marker points list.
+        self.markers = Marker()
+        self.markers.ns = marker_ns
+        self.markers.id = marker_id
+        self.markers.type = Marker.CUBE_LIST
+        self.markers.action = Marker.ADD
+        self.markers.lifetime = rospy.Duration(marker_lifetime)
+        self.markers.scale.x = marker_scale
+        self.markers.scale.y = marker_scale
+        self.markers.color.r = marker_color['r']
+        self.markers.color.g = marker_color['g']
+        self.markers.color.b = marker_color['b']
+        self.markers.color.a = marker_color['a']
+        #self.markers.type.imag =  
+        self.markers.header.frame_id = 'odom'
+        self.markers.header.stamp = rospy.Time.now()
+        self.markers.points = list()
+        print self.markers.points
+#if __name__ == '__main__':
+    #ControlCar()

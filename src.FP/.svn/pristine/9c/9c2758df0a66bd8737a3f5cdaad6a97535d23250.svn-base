@@ -1,0 +1,20 @@
+<launch>
+    <node pkg="robot_driver" type="LaserObstacle.py" name="LaserObstacle" output="screen" />
+  
+    <node pkg="robot_driver" type="LaserControl.py" name="LaserControl" output="screen" />
+
+    <!-- <node pkg="robot_driver" type="EncodeCancul.py" name="EncodeCancul" output="screen" /> -->
+
+    <node pkg="robot_driver" type="LaserStatusPub.py" name="LaserStatusPub" output="screen" />
+    
+    <!-- <node pkg="robot_driver" type="serial_led.py" name="LedControl" output="screen" /> -->
+    
+    <node pkg="robot_driver" type="AreaInformation.py" name="AreaInformation" output="screen" />
+    
+    <!-- <node pkg="sound_play" type="soundplay_node.py" name="soundplay_node" output="screen" /> -->
+    
+    <node pkg="robot_driver" type="turtlebot4_teleop_key.py" name="turtlebot4_teleop_key" output="screen" />
+</launch> 
+
+
+

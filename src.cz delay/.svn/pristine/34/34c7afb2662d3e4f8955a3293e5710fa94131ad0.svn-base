@@ -1,0 +1,21 @@
+message WeatherMessage {  
+	optional Gps GpsMessage=1;    //Gps定位信息
+	optional float Temp=2;    //温度
+	optional float Humi=3;    //湿度
+	optional float Speed=4;   //风速
+	optional float Rain=5;    //雨量
+	optional float Snow=6;    //雪量
+	optional Mode ModeMessage=7;  //工作模式状态
+	message Gps{
+		required string Time=1;  //命令发送时的时间
+		optional string Lat=2;   //北纬
+		optional string Lon=3;   //东经
+		optional int64 Nosv=4;   //卫星个数
+		optional int64 Fs=5;	 //定位是否有效，0：无效，1：有效
+	};
+	message Mode{
+	optional int64 WorkMode=1;   //工作模式，0：手动，1：自动
+	optional int64 Rate=2;       //发送频率，单位：分钟
+	optional int64 ErrorCode=3;  //传感器错误代码
+	};
+};	

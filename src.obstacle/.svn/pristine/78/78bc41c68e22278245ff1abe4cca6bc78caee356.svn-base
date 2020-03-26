@@ -1,0 +1,102 @@
+#!/usr/bin/env  python
+# -*- coding: utf-8 -*-
+import rospy
+from Tkinter import *
+import tkMessageBox
+#import Tkinter
+import commands
+import os
+import subprocess
+import time
+import sys
+#import rospy
+
+root = Tk(className='MapTool v1.0')
+root.geometry('500x300')
+
+def fire():
+    child0 = subprocess.Popen(["source /opt/ros/kinetic/setup.bash"],shell=True)
+    time.sleep(1)
+    child1 = subprocess.Popen(["source ~/robot4/devel/setup.bash"],shell=True)
+    time.sleep(1)
+    child2 = subprocess.Popen(["roslaunch srbsmartcar_description smartcar.launch"],shell=True)
+    time.sleep(5)
+    child2 = subprocess.Popen(["rosrun rviz rviz"], shell=True)
+   # time.sleep(2)
+   # child3 = subprocess.Popen(["roslaunch turtlebot_teleop xbox360_teleop.launch"], shell=True)
+def bag():
+    child = subprocess.Popen(["rosbag record /scan /tf /tf_static /cmd_vel /real_vel /imu_data /velodyne_points --split --size 1024 -O map"], shell=True)
+
+def list():
+    (status, output) = commands.getstatusoutput('rosnode list')
+    ll=output.split('\n')
+    for item in ll:
+        Lb1.insert(END,item)
+    
+def bagsave():
+    #child = subprocess.Popen(["^C"], shell=True)
+    #child = subprocess.Popen(["rosnode kill -a"], shell=True)
+    sys.exit(0)
+def kill():
+    child = subprocess.Popen(["rosnode kill -a"], shell=True)
+    time.sleep(5)
+    child = subprocess.Popen(["kill $(ps aux | grep roslaunch | grep -v grep | awk '{print $2}')"], shell=True)
+def map():
+    child = subprocess.Popen(["roslaunch srbsmartcar_description smartcar_mapping_back.launch"], shell=True)
+    time.sleep (20)
+    #child = subprocess.Popen(["rosparam set use_sim_time true"], shell=True)
+    #child1 = subprocess.Popen(["roslaunch rbx1_nav gmapping_demo.launch"], shell=True)
+    child2 = subprocess.Popen(["rosrun rviz rviz"], shell=True)
+    time.sleep(10)  
+    #playbag()
+def playbag():
+    import rosbag
+    rosbag.rosbagmain(['rosbag','play','map_0.bag'])
+def mark1():
+    # child0 = subprocess.Popen(["source /opt/ros/kinetic/setup.bash"],shell=True)
+    # time.sleep(1)
+    # child1 = subprocess.Popen(["source /home/robot/catkin_ws/devel/setup.bash"],shell=True)
+    # time.sleep(1)
+    #child = subprocess.Popen(["roslaunch srbsmartcar_description smartcar_fake.launch"], shell=True)
+    #time.sleep(5)
+    #child1 = subprocess.Popen(["roslaunch srbsmartcar_description smartcar_fake.launch map:=map_cut.yaml"], shell=True)
+    #time.sleep(5)
+    child2 = subprocess.Popen(["rosrun rviz rviz"], shell=True)
+    time.sleep(5)
+    child2 = subprocess.Popen(["rosrun robot_driver markerpoint.py"], shell=True)
+def mark2():
+    child = subprocess.Popen(["rosrun robot_driver markerpoint2.py"], shell=True)
+def mapsave():
+    child = subprocess.Popen(["rosrun map_server map_saver -f map"], shell=True)
+    time.sleep(10)
+    #child2 = subprocess.Popen(["Ctrl + c"], shell=True)
+   # child = subprocess.Popen(["kill $(ps aux | grep roslaunch | grep -v grep | awk '{print $2}')"], shell=True)
+    #quit()
+
+btn1=Button(root, text="启动机器人", fg="blue",bd=2,width=28,command=fire)
+btn1.grid(row=0,column=0)
+btn2=Button(root, text="显示运行的节点", fg="blue",bd=2,width=28,command=list)
+btn2.grid(row=1,column=0)
+Lb1 = Listbox(root)
+#Lb1.pack(root, text="Red Sun", bg="red", fg="white")
+Lb1.grid(row=0,column=1, columnspan=2,rowspan=9,sticky=W+E+N+S, padx=5, pady=5)
+
+btn3=Button(root, text="开始记录包数据", fg="blue",bd=2,width=28,command=bag)
+btn3.grid(row=2,column=0)
+btn5=Button(root, text="保存数据包", fg="blue",bd=2,width=28,command=bagsave)
+btn5.grid(row=4,column=0)
+btn6=Button(root, text="生成地图", fg="blue",bd=2,width=28,command=map)
+btn6.grid(row=5,column=0)
+btn7=Button(root, text="保存地图", fg="blue",bd=2,width=28,command=mapsave)
+btn7.grid(row=6,column=0)
+btn8=Button(root, text="标点程序", fg="red",bd=2,width=28,command=mark1)
+btn8.grid(row=7,column=0)
+btn9=Button(root, text="显点程序", fg="blue",bd=2,width=28,command=mark2)
+btn9.grid(row=8,column=0)
+root.mainloop()
+
+while (1):
+    (status, output) = commands.getstatusoutput('rosnode list')
+    ll=output.split('\n')
+    for item in ll:
+        Lb1.insert(END,item)

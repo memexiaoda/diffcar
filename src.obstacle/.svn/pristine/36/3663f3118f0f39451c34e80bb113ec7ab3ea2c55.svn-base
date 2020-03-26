@@ -1,0 +1,20 @@
+<launch>
+    <node pkg="rbx1_nav" type="LaserObstacle.py" name="LaserObstacle" output="screen">
+    </node>    
+
+    <node pkg="rbx1_nav" type="LaserControl.py" name="LaserControl" output="screen">
+    </node>
+
+    <node pkg="rbx1_nav" type="EncodeCancul.py" name="EncodeCancul" output="screen"> 
+    </node>
+
+    <node pkg="rbx1_nav" type="LaserStatusPub.py" name="LaserStatusPub" output="screen">
+    </node>
+
+    <node pkg="rbx1_nav" type="nomotion_update_client.py" name="nomotion_update" output="screen">
+    </node>
+
+</launch> 
+
+
+

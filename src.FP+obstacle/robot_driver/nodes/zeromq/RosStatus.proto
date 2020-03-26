@@ -1,0 +1,10 @@
+message RosStatus{
+		optional int32 arbotix_status=1;   //arbotix启动完毕
+		optional int32 amcl_status=2;   //amcl启动完毕信息
+		optional int32 laser_status=3;   //雷达信息
+		optional string ros_info=4; 
+		optional string ros_warn=5;   //ros系统运行中警告信息
+		optional string ros_error=6;   //ros系统运行中错误信息
+
+	};
+

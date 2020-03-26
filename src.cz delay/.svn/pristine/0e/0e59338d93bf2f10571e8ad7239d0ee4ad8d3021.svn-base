@@ -1,0 +1,15 @@
+<launch>
+
+  <param name="use_sim_time" value="false" />
+
+  <!-- The move_base node -->
+  <include file="$(find robot_driver)/launch/fake_move_base_obstacles.launch" />
+  
+  <!-- Run fake localization compatible with AMCL output -->
+  <node pkg="fake_localization" type="fake_localization" name="fake_localization" clear_params="true" output="screen">
+     <remap from="base_pose_ground_truth" to="odom" />
+     <param name="global_frame_id" value="map" />
+     <param name="base_frame_id" value="base_footprint" />
+  </node>
+
+</launch>

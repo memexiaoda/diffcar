@@ -1,0 +1,9 @@
+message Setgoalwork{
+	required string fname=1;
+	required string work=2;
+	required int32 stop=3;
+	optional float x=4;
+	optional float  y=5;
+	optional string fnameend=6;
+	 
+}
